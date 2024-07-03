@@ -89,6 +89,8 @@ void OnTick()
     {
       isLondonOpen = false;
     }
+
+    trailingStop();
     
    
   }
@@ -129,4 +131,36 @@ double positionSizeCalculation(){
   double positionSize = MathFloor(riskInCurrency / riskLotStep) * lotStep;
 
   return positionSize;
+}
+
+void trailingStop()
+{
+    double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+    double minTrailingDistance = 200 * _Point; // Distance minimale entre le SL initial et le nouveau SL
+
+    for (int i = PositionsTotal() - 1; i >= 0; i--)
+    {
+        if (PositionSelect(_Symbol))
+        {
+            ulong positionTicket = PositionGetInteger(POSITION_TICKET);
+            long positionType = PositionGetInteger(POSITION_TYPE);
+            double positionSL = PositionGetDouble(POSITION_SL);
+            double positionTP = PositionGetDouble(POSITION_TP);
+            double positionOpenPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+            double initialSL = positionType == POSITION_TYPE_BUY ? positionOpenPrice - SL : positionOpenPrice + SL; 
+
+            double pipsInProfit = positionType == POSITION_TYPE_BUY ? ask - positionOpenPrice : positionOpenPrice - bid;
+            double trailingStop = positionType == POSITION_TYPE_BUY ? positionOpenPrice + pipsInProfit - minTrailingDistance : positionOpenPrice - pipsInProfit + minTrailingDistance;
+
+            if ((positionType == POSITION_TYPE_BUY && pipsInProfit > 0 && trailingStop > positionSL && trailingStop > initialSL) ||
+                (positionType == POSITION_TYPE_SELL && pipsInProfit > 0 && trailingStop < positionSL && trailingStop < initialSL))
+            {
+                if (!trade.PositionModify(positionTicket, trailingStop, positionTP))
+                {
+                    Print("Erreur lors de la modification de la position: ", positionTicket, " Erreur: ", GetLastError());
+                }
+            }
+        }
+    }
 }
